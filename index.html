@@ -25,14 +25,8 @@
   --sans:'Space Grotesk',sans-serif;
 }
 
-html{
-  scroll-snap-type:y mandatory;
-  overflow-y:scroll;
-  height:100%;
-  background:var(--bg);
-}
-body{
-  width:100%;min-height:100%;
+html,body{
+  width:100%;height:100%;overflow:hidden;
   background:var(--bg);
   font-family:var(--sans);
   color:#fff;
@@ -49,11 +43,12 @@ body{
    SLIDE SYSTEM
 ══════════════════════════════════════════ */
 .slide{
-  width:100vw;min-height:100vh;
-  scroll-snap-align:start;
+  position:absolute;top:0;left:0;width:100vw;height:100vh;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:60px 80px;position:relative;
+  opacity:0;visibility:hidden;z-index:10;padding:60px 80px;
+  transition:opacity 0.6s ease,visibility 0s 0.6s;
 }
+.slide.active{opacity:1;visibility:visible;transition:opacity 0.6s ease,visibility 0s 0s}
 
 /* ══════════════════════════════════════════
    SHARED TYPOGRAPHY
@@ -1188,9 +1183,44 @@ body{
 ══════════════════════════════════════════ */
 .slide-counter{
   position:fixed;top:12px;right:12px;
-  font-family:var(--mono);font-size:12px;color:rgba(255,255,255,0.25);z-index:100;
+  font-family:var(--mono);font-size:12px;color:rgba(255,255,255,0.25);z-index:200;
   background:rgba(0,0,0,0.5);padding:4px 10px;border-radius:8px;
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.mobile-nav{
+  display:none;
+}
+@media (max-width:900px){
+  .mobile-nav{
+    display:flex;
+    position:fixed;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    gap:24px;
+    z-index:200;
+  }
+  .mobile-nav-btn{
+    width:56px;height:56px;border-radius:50%;
+    border:1px solid rgba(255,255,255,0.2);
+    background:rgba(0,0,0,0.7);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    color:rgba(255,255,255,0.8);font-size:24px;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    user-select:none;
+  }
+  .mobile-nav-btn:active{
+    background:rgba(0,245,255,0.2);
+    border-color:rgba(0,245,255,0.5);
+    color:#00f5ff;
+  }
+}
+@media (max-width:480px){
+  .mobile-nav-btn{width:48px;height:48px;font-size:20px}
+  .mobile-nav{gap:20px;bottom:16px}
 }
 
 /* ══════════════════════════════════════════
@@ -1217,8 +1247,10 @@ body{
   .slide {
     padding: 24px 20px;
     padding-top: 40px;
-    min-height: 100vh;
-    height: auto;
+    padding-bottom: 90px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start;
   }
   .section-num { font-size: 11px; letter-spacing: 3px; }
   .section-title { font-size: 28px !important; }
@@ -2223,6 +2255,10 @@ body{
 </div>
 
 <!-- NAVIGATION -->
+<div class="mobile-nav" id="mobileNav">
+  <div class="mobile-nav-btn" id="btnPrev">‹</div>
+  <div class="mobile-nav-btn" id="btnNext">›</div>
+</div>
 <div class="slide-counter" id="slideCounter">1 / 19</div>
 
 <script>
@@ -2340,42 +2376,52 @@ setInterval(()=>{
 })();
 
 // ══════════════════════════════════════════════════════════════
-// SCROLL-SNAP NAVIGATION (IntersectionObserver)
+// NAVIGATION
 // ══════════════════════════════════════════════════════════════
-const slideEls = SLIDES.map(id => document.getElementById(id));
 const counterEl = document.getElementById('slideCounter');
 
-// Mark first slide active for CSS animations
-slideEls[0].classList.add('active');
+function goTo(idx){
+  if(idx<0||idx>=SLIDES.length) return;
+  if(idx===0 && !bootDone) return;
+  if(idx===cur) return;
 
-const observer = new IntersectionObserver((entries) => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      const idx = slideEls.indexOf(entry.target);
-      if (idx >= 0) {
-        cur = idx;
-        counterEl.textContent = (idx + 1) + ' / ' + SLIDES.length;
-        entry.target.classList.add('active');
-        triggerAnimations(SLIDES[idx]);
-      }
-    }
-  });
-}, { threshold: 0.5 });
+  // Glitch flash
+  const gf = document.getElementById('glitchFlash');
+  gf.classList.add('active');
+  setTimeout(()=>gf.classList.remove('active'),250);
 
-slideEls.forEach(el => observer.observe(el));
+  document.getElementById(SLIDES[cur]).classList.remove('active');
+  cur = idx;
+  const el = document.getElementById(SLIDES[cur]);
+  el.classList.add('active');
+  el.scrollTop = 0; // reset scroll position for new slide
+  counterEl.textContent = (cur+1) + ' / ' + SLIDES.length;
+  triggerAnimations(SLIDES[cur]);
+}
 
-// Card click: scroll to target slide
-document.querySelectorAll('.cap-card').forEach(c => {
-  c.addEventListener('click', () => {
-    const t = parseInt(c.dataset.goto);
-    if (!isNaN(t) && slideEls[t]) {
-      slideEls[t].scrollIntoView({ behavior: 'smooth' });
-    }
+function next(){goTo(cur+1)}
+function prev(){goTo(cur-1)}
+
+// Keyboard (desktop)
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'||e.code==='ArrowRight'||e.code==='ArrowDown'){e.preventDefault();next()}
+  else if(e.code==='ArrowLeft'||e.code==='ArrowUp'){e.preventDefault();prev()}
+});
+
+// Mobile nav buttons
+document.getElementById('btnPrev').addEventListener('click',function(e){e.stopPropagation();prev()});
+document.getElementById('btnNext').addEventListener('click',function(e){e.stopPropagation();next()});
+
+// Card click navigation
+document.querySelectorAll('.cap-card').forEach(c=>{
+  c.addEventListener('click',()=>{
+    const t=parseInt(c.dataset.goto);
+    if(!isNaN(t))goTo(t);
   });
 });
 
 // Vault door click
-document.getElementById('vaultDoor').addEventListener('click', function() {
+document.getElementById('vaultDoor').addEventListener('click',function(){
   this.classList.toggle('open');
 });
 
@@ -2627,7 +2673,10 @@ function animateRealTalk(){
   setTimeout(()=>closing.classList.add('vis'),300+cards.length*300+200+takes.length*200+300);
 }
 
-// (Mobile navigation handled by native scroll-snap — no JS needed)
+// Boot screen tap to advance
+document.getElementById('slide-boot').addEventListener('click',function(){
+  if(bootDone && cur===0) next();
+});
 
 // ══════════════════════════════════════════════════════════════
 // CONSOLE EASTER EGG
